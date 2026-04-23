@@ -1,0 +1,35 @@
+services:
+  napcat:
+    image: mlikiowa/napcat-docker:latest
+    container_name: cet6-napcat
+    restart: unless-stopped
+    environment:
+      NAPCAT_UID: ${NAPCAT_UID:-1000}
+      NAPCAT_GID: ${NAPCAT_GID:-1000}
+      WEBUI_TOKEN: ${NAPCAT_WEBUI_TOKEN:-napcat-change-me}
+    ports:
+      - "${NAPCAT_WEBUI_PORT:-6099}:6099"
+    volumes:
+      - ./docker-data/napcat/config:/app/napcat/config
+      - ./docker-data/napcat/qq:/app/.config/QQ
+      - ./articles:/data/shared/articles
+
+  cet6-qq-pusher:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cet6-qq-pusher
+    restart: unless-stopped
+    depends_on:
+      - napcat
+    env_file:
+      - .env
+    environment:
+      CET6_BOT_RUN_MODE: ${CET6_BOT_RUN_MODE:-scheduler}
+      NAPCAT_API_BASE: ${NAPCAT_API_BASE:-http://napcat:3000}
+      LOCAL_ARTICLE_ROOT: ${LOCAL_ARTICLE_ROOT:-/app/articles}
+      NAPCAT_SHARED_ROOT: ${NAPCAT_SHARED_ROOT:-/data/shared/articles}
+      CET6_BOT_STATE_FILE: ${CET6_BOT_STATE_FILE:-/app/runtime/qq-push-state.json}
+    volumes:
+      - ./articles:/app/articles
+      - ./runtime:/app/runtime
