@@ -17,7 +17,7 @@ if [ -f "$SCRIPT_DIR/.env" ]; then
 fi
 
 # 激活 Python 虚拟环境
-source "$SCRIPT_DIR/venv/bin/activate"
+source "$SCRIPT_DIR/.venv/bin/activate"
 
 LOG_PREFIX="[run_daily $(date '+%Y-%m-%d %H:%M:%S')]"
 DATE_LABEL=$(date '+%m-%d')
