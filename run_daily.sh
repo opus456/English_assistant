@@ -12,11 +12,38 @@ fi
 
 LOG_PREFIX="[run_daily $(date '+%Y-%m-%d %H:%M:%S')]"
 DATE_LABEL=$(date '+%m-%d')
+SCRAPER_REGION=${SCRAPER_REGION:-}
+SCRAPER_SCRIPT="$SCRIPT_DIR/scrape_articles.py"
+
+if [ -z "$SCRAPER_REGION" ]; then
+    if [ -t 0 ]; then
+        echo "请选择爬取环境："
+        echo "1) 国内"
+        echo "2) 国外"
+        read -r -p "请输入 1 或 2 [默认 1]: " REGION_CHOICE
+        case "$REGION_CHOICE" in
+            2)
+                SCRAPER_REGION="国外"
+                ;;
+            *)
+                SCRAPER_REGION="国内"
+                ;;
+        esac
+    else
+        SCRAPER_REGION="国内"
+        echo "$LOG_PREFIX 未检测到交互终端，默认使用国内爬虫源"
+    fi
+fi
+
+if [ "$SCRAPER_REGION" = "国外" ]; then
+    SCRAPER_SCRIPT="$SCRIPT_DIR/scrape_articles_cn.py"
+fi
 
 echo "$LOG_PREFIX 开始每日任务，日期：$DATE_LABEL"
+echo "$LOG_PREFIX 当前爬取环境：$SCRAPER_REGION"
 
 echo "$LOG_PREFIX 步骤 1/3：抓取今日文章"
-uv run "$SCRIPT_DIR/scrape_articles.py" --output-dir "articles/$DATE_LABEL"
+uv run "$SCRAPER_SCRIPT" --output-dir "articles/$DATE_LABEL"
 
 echo "$LOG_PREFIX 步骤 2/3：生成六级材料和 PDF"
 uv run "$SCRIPT_DIR/generate_cet6_materials.py" \
