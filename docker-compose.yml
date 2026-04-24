@@ -14,6 +14,37 @@ services:
       - ./docker-data/napcat/qq:/app/.config/QQ
       - ./articles:/data/shared/articles
 
+  # 每天凌晨 6:00 自动抓取文章并生成 PDF
+  cet6-daily-generator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cet6-daily-generator
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      LLM_API_KEY: ${LLM_API_KEY}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.deepseek.com/v1}
+      LLM_MODEL: ${LLM_MODEL:-deepseek-chat}
+    volumes:
+      - ./articles:/app/articles
+      - ./runtime:/app/runtime
+    # 用 supercronic 实现容器内定时任务（每天 06:00 运行）
+    command: >
+      sh -c "
+        while true; do
+          now=\$$(date '+%H:%M');
+          if [ \"\$$now\" = \"${GENERATE_TIME:-06:00}\" ]; then
+            echo '[cron] Starting daily generation...';
+            bash /app/run_daily.sh;
+            sleep 61;
+          fi;
+          sleep 30;
+        done
+      "
+
+  # 每天 07:30 把生成好的 PDF 发送到 QQ
   cet6-qq-pusher:
     build:
       context: .

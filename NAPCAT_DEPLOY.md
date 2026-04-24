@@ -1,107 +1,113 @@
-# NapCat QQ 机器人部署说明
+# CET6 Daily Flow 部署指南
 
-本项目新增了一个独立的 QQ 推送服务，它会读取 `articles/<MM-DD>` 目录下最新的一对 PDF，然后通过 NapCat 暴露的 OneBot HTTP API 发送给指定 QQ。
+## 这个系统是做什么的？
+
+```
+每天 06:00  →  自动抓取 BBC 文章
+             →  调用 DeepSeek AI 生成六级题目+解析
+             →  生成 test.pdf（试卷）和 answer.pdf（解析卷）
+每天 07:30  →  通过机器人 QQ 账号把两个 PDF 发给你
+```
+
+## 名词解释
+
+- **NapCat**：一个程序，帮你登录一个 QQ 小号（机器人账号），让代码能自动发 QQ 消息。
+- **Token / WebUI Token**：你自己随便设的密码字符串，不需要去任何平台申请，保证安全即可。
+- **DeepSeek API Key**：去 [platform.deepseek.com](https://platform.deepseek.com/) 注册并充值少量金额（每天调用费用约几分钱）即可获得。
+
+## 准备清单
+
+- [ ] 一台安装了 Docker 的 Linux 服务器
+- [ ] 一个 QQ 小号（作为机器人账号，不能是你自己常用的号）
+- [ ] DeepSeek API Key（[platform.deepseek.com](https://platform.deepseek.com/) 注册）
+- [ ] 知道你自己的 QQ 号（接收消息用）
 
 ## 文件说明
 
-- `qq_daily_sender.py`：定时推送脚本
-- `Dockerfile`：推送服务镜像
-- `docker-compose.yml`：同时启动 NapCat 和推送服务
+- `scrape_articles.py`：每日抓取英文文章
+- `generate_cet6_materials.py`：AI 生成六级材料并输出 PDF
+- `qq_daily_sender.py`：定时通过 QQ 推送 PDF
+- `run_daily.sh`：每日自动化脚本（抓取+生成）
+- `Dockerfile`：服务镜像
+- `docker-compose.yml`：启动全部服务
 - `.env.example`：环境变量模板
 
-## 部署前提
+## 第一步：上传项目到服务器
 
-1. 服务器已安装 Docker 和 Docker Compose
-2. 服务器目录中已经存在你每天生成的 PDF 文件，路径格式如下：
+```bash
+# 在本机执行，把项目上传到服务器
+scp -r English_assistant 你的用户名@服务器IP:/home/你的用户名/english_assistant
 
-```text
-articles/04-23/04-23-xxx-test.pdf
-articles/04-23/04-23-xxx-answer.pdf
+# 登录服务器
+ssh 你的用户名@服务器IP
+cd /home/你的用户名/english_assistant
 ```
 
-## 第一步：准备环境变量
-
-复制环境变量模板：
+## 第二步：配置环境变量
 
 ```bash
 cp .env.example .env
+nano .env   # 或 vim .env
 ```
 
-至少要改这几项：
+**必须修改的项目：**
 
-- `QQ_TARGET_TYPE=private`
-- `QQ_TARGET_ID=你的QQ号`
-- `NAPCAT_ACCESS_TOKEN=你准备给 OneBot HTTP 服务配置的 token`
-- `NAPCAT_WEBUI_TOKEN=NapCat WebUI 登录口令`
-- `CET6_BOT_SEND_TIME=07:30`
+| 变量 | 说明 | 示例 |
+|------|------|------|
+| `QQ_TARGET_ID` | 你自己的 QQ 号（接收消息） | `123456789` |
+| `NAPCAT_WEBUI_TOKEN` | 浏览器登录机器人 QQ 的密码，自己编 | `my-webui-pass-2024` |
+| `NAPCAT_ACCESS_TOKEN` | API 访问令牌，自己编一个字符串 | `my-secret-abc123` |
+| `DEEPSEEK_API_KEY` | DeepSeek AI 的 API 密钥 | `sk-xxxx...` |
 
-## 第二步：启动容器
+**可选修改：**
+
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `GENERATE_TIME` | 每天几点生成文章+PDF | `06:00` |
+| `CET6_BOT_SEND_TIME` | 每天几点发 QQ 消息 | `07:30` |
+
+## 第三步：启动所有容器
 
 ```bash
 docker compose up -d --build
 ```
 
-启动后会有两个容器：
+启动后会有 **三个** 容器：
 
-- `cet6-napcat`
-- `cet6-qq-pusher`
+- `cet6-napcat` — 机器人 QQ 程序
+- `cet6-daily-generator` — 每天自动抓取文章并生成 PDF
+- `cet6-qq-pusher` — 每天定时发 QQ 消息
 
-## 第三步：登录 NapCat
+## 第四步：登录机器人 QQ 账号（一次性操作）
 
-打开：
+用浏览器打开：
 
-```text
+```
 http://你的服务器IP:6099/webui
 ```
 
-使用 `.env` 里的 `NAPCAT_WEBUI_TOKEN` 登录。
+输入 `.env` 里的 `NAPCAT_WEBUI_TOKEN` 登录，然后：
 
-然后在 WebUI 中完成：
+1. **扫码登录**：用你的 QQ 小号（机器人账号）扫码登录
+2. **配置 OneBot HTTP Server**：进入 "网络配置" → "新建" → 选 "HTTP Server"：
+   ```
+   Host:  0.0.0.0
+   Port:  3000
+   Token: 填写 .env 里的 NAPCAT_ACCESS_TOKEN（必须完全一致）
+   ```
+   点击保存并启用。
 
-1. 进入 QQ 登录页面
-2. 使用二维码登录你的 QQ
-3. 进入 OneBot 网络配置
-4. 新建一个 HTTP Server
-5. 配置以下参数：
-
-```text
-host: 0.0.0.0
-port: 3000
-token: 与 .env 中的 NAPCAT_ACCESS_TOKEN 保持一致
-enable: true
-```
-
-保存并启用。
-
-## 第四步：手动测试一次发送
-
-先确保 `articles/<今天日期>` 下已经有 PDF，再执行：
+## 第五步：手动测试（验证一切正常）
 
 ```bash
+# 先手动触发一次生成
+docker compose run --rm cet6-daily-generator bash /app/run_daily.sh
+
+# 再手动触发一次发送（不等到 07:30）
 docker compose run --rm cet6-qq-pusher python /app/qq_daily_sender.py --mode once
 ```
 
-如果你只想看它会发什么，不真的调用 NapCat：
-
-```bash
-docker compose run --rm cet6-qq-pusher python /app/qq_daily_sender.py --mode once --dry-run
-```
-
-## 第五步：定时自动发送
-
-默认 `docker-compose.yml` 已经让推送服务用 `scheduler` 模式运行。它会：
-
-1. 按 `CET6_BOT_SEND_TIME` 轮询
-2. 找到当天目录下最新的一对 PDF
-3. 先发文字摘要
-4. 再发试卷 PDF 和解析 PDF
-5. 记录当天已发送状态，避免同一天重复发
-
-状态文件默认在：
-
-```text
-runtime/qq-push-state.json
-```
+如果你的 QQ 收到了 PDF，说明部署成功！以后每天会全自动运行。
 
 ## 目录共享为什么这样设计
 
