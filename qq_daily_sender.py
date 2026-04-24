@@ -36,6 +36,7 @@ class DailyAssets:
 @dataclass(slots=True)
 class AppConfig:
     mode: str
+    sender_runtime: str
     timezone: str
     send_time: str
     poll_seconds: int
@@ -94,6 +95,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run once immediately or keep scheduling daily sends.",
     )
     parser.add_argument(
+        "--sender-runtime",
+        choices=["auto", "local", "docker"],
+        default=os.environ.get("CET6_BOT_SENDER_RUNTIME", "auto"),
+        help="Choose how file paths are prepared for NapCat uploads.",
+    )
+    parser.add_argument(
         "--env-file",
         default=os.environ.get("CET6_BOT_ENV_FILE", ".env"),
         help="Environment file path.",
@@ -144,7 +151,20 @@ def build_config(args: argparse.Namespace) -> AppConfig:
     napcat_api_base = os.environ.get("NAPCAT_API_BASE", "http://napcat:3000").rstrip("/")
     article_root = Path(os.environ.get("ARTICLES_ROOT", "articles"))
     local_article_root = Path(os.environ.get("LOCAL_ARTICLE_ROOT", str(article_root)))
-    napcat_shared_root = Path(os.environ.get("NAPCAT_SHARED_ROOT", "/data/shared/articles"))
+    sender_runtime = args.sender_runtime
+    napcat_shared_root_raw = os.environ.get("NAPCAT_SHARED_ROOT", "").strip()
+    if sender_runtime == "docker":
+        if napcat_shared_root_raw:
+            napcat_shared_root = Path(napcat_shared_root_raw)
+        else:
+            napcat_shared_root = Path("/data/shared/articles")
+    elif sender_runtime == "local":
+        napcat_shared_root = local_article_root.resolve()
+    else:
+        if napcat_shared_root_raw:
+            napcat_shared_root = Path(napcat_shared_root_raw)
+        else:
+            napcat_shared_root = local_article_root.resolve()
     state_file = Path(os.environ.get("CET6_BOT_STATE_FILE", "runtime/qq-push-state.json"))
     poll_seconds = env_int("CET6_BOT_POLL_SECONDS", 20)
     send_time = os.environ.get("CET6_BOT_SEND_TIME", "07:30")
@@ -152,6 +172,7 @@ def build_config(args: argparse.Namespace) -> AppConfig:
 
     return AppConfig(
         mode=args.mode,
+        sender_runtime=sender_runtime,
         timezone=timezone,
         send_time=send_time,
         poll_seconds=poll_seconds,
@@ -283,6 +304,11 @@ def build_push_message(config: AppConfig, assets: DailyAssets) -> str:
 def map_to_napcat_path(config: AppConfig, local_path: Path) -> str:
     resolved_local_root = config.local_article_root.resolve()
     resolved_path = local_path.resolve()
+    resolved_shared_root = config.napcat_shared_root.resolve() if not config.napcat_shared_root.is_absolute() else config.napcat_shared_root
+
+    if resolved_shared_root == resolved_local_root:
+        return str(resolved_path)
+
     try:
         relative_path = resolved_path.relative_to(resolved_local_root)
     except ValueError as exc:
