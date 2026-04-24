@@ -472,11 +472,11 @@ def iter_feed_candidates(config: ScraperConfig) -> Iterable[FeedEntry]:
                 yield entry
 
 # 爬取文章
-def scrape_article(page, entry: FeedEntry, timeout_ms: int, retries: int) -> ArticleCandidate | None:
+def scrape_article(context, entry: FeedEntry, timeout_ms: int, retries: int) -> ArticleCandidate | None:
     hostname = urlparse(entry.url).netloc.lower()
     selectors = ARTICLE_SELECTORS.get(hostname.replace("www.", ""), ["article p", "main p"]) #获取域名
 
-    text = scrape_with_retry(page, entry.url, selectors, timeout_ms, retries)
+    text = scrape_with_retry(context, entry.url, selectors, timeout_ms, retries)
 
     if not text:
         return None
@@ -497,14 +497,10 @@ def scrape_article(page, entry: FeedEntry, timeout_ms: int, retries: int) -> Art
         difficulty_band=difficulty_band,
     )
 
-def scrape_with_retry(page, url: str, selectors: list[str], timeout_ms: int, retries: int) -> str:
+def scrape_with_retry(context, url: str, selectors: list[str], timeout_ms: int, retries: int) -> str:
     last_error: Exception | None = None
     for attempt in range(1, retries + 1):
-        try:
-            page.close()
-        except PlaywrightError:
-            pass
-        page = page.context.new_page()
+        page = context.new_page()
         try:
             page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
             accept_common_popups(page)
@@ -523,10 +519,7 @@ def scrape_with_retry(page, url: str, selectors: list[str], timeout_ms: int, ret
                 url,
                 exc,
             )
-            try:
-                page.close()
-            except PlaywrightError:
-                pass
+            page.close()
             time.sleep(min(attempt, 2))
     LOGGER.error("Failed to scrape article %s", url)
     if last_error:
@@ -675,6 +668,10 @@ def main() -> int:
 
     published_after = parse_cli_date(args.published_after, end_of_day=False)
     published_before = parse_cli_date(args.published_before, end_of_day=True)
+    if published_after is None and published_before is None and args.recent_days is None:
+        today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        published_after = today_start
+        published_before = today_start.replace(hour=23, minute=59, second=59, microsecond=999999)
     if args.recent_days is not None:
         if args.recent_days <= 0:
             raise SystemExit("--recent-days must be greater than 0")
@@ -717,7 +714,6 @@ def main() -> int:
             user_agent=USER_AGENT,
             ignore_https_errors=CURRENT_CONFIG.ignore_https_errors,
         )
-        page = context.new_page()
         try:
             for entry in iter_feed_candidates(config=CURRENT_CONFIG):
                 hostname = urlparse(entry.url).netloc.lower().replace("www.", "")
@@ -727,7 +723,7 @@ def main() -> int:
                     continue
 
                 LOGGER.info("Inspecting %s | %s", entry.source, entry.title)
-                candidate = scrape_article(page, entry, timeout_ms=args.timeout_ms, retries=args.retries)
+                candidate = scrape_article(context, entry, timeout_ms=args.timeout_ms, retries=args.retries)
                 if candidate is None:
                     failures = host_failures.get(hostname, 0) + 1
                     host_failures[hostname] = failures
@@ -767,10 +763,6 @@ def main() -> int:
                 if accepted >= args.limit:
                     break
         finally:
-            try:
-                page.close()
-            except PlaywrightError:
-                pass
             context.close()
             browser.close()
 
