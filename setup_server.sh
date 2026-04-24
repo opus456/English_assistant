@@ -22,16 +22,12 @@ sudo apt-get install -y --no-install-recommends \
     libcups2 libdrm2 libxkbcommon0 libxcomposite1 \
     libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2
 
-# 2. 创建 Python 虚拟环境
-echo "[2/5] 创建 Python 虚拟环境..."
-python3 -m venv "$SCRIPT_DIR/venv"
-source "$SCRIPT_DIR/venv/bin/activate"
+# 2. 创建虚拟环境
+uv venv "$SCRIPT_DIR/.venv"
+source "$SCRIPT_DIR/.venv/bin/activate"
 
-# 3. 安装 Python 依赖
-echo "[3/5] 安装 Python 依赖..."
-pip install --upgrade pip -q
-pip install -r "$SCRIPT_DIR/requirements.txt" -q
-# 安装 playwright 浏览器
+# 3.安装python依赖
+uv pip install -r "$SCRIPT_DIR/requirements.txt"
 python -m playwright install chromium
 
 # 4. 创建必要目录和配置文件

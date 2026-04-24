@@ -88,6 +88,7 @@ docker compose up -d
 - **抓取失败 / feed timeout**：多为网络不通，配置代理；必要时加 `--relax-feed-ssl --ignore-https-errors`。
 - **PDF 字体缺失**：WeasyPrint 依赖系统字体，Dockerfile 已内置；本地需安装 `fonts-noto-cjk`。
 - **NapCat 未登录**：打开 WebUI 扫码，首次登录后 `docker-data/napcat/qq` 会持久化凭据。
+- **无魔法或部署到服务器上无法访问国外网站**：将scrape_articles.py中的`ARTICLE_SELECTORS`和`FEEDS`中的内容换成cn.py中的内容
 
 ## 📜 License
 

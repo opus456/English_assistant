@@ -16,3 +16,6 @@ logs/
 
 # Docker 残留
 docker-data/
+
+# 开发时需求文档
+need.md
